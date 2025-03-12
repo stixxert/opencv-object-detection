@@ -6,8 +6,15 @@
 #include <iostream>
 #include <string>
 
+using CornerPointsContainer = std::array<cv::Point2f, 4>;
+using TransformPoints = std::vector<cv::Point2f>;
+using TransformMatches = std::pair<TransformPoints, TransformPoints>;
+using MatchesContainer = std::vector<std::vector<cv::DMatch>>;
+using GoodMatchesContainer = std::vector<cv::DMatch>;
+using FeaturePoints = std::vector<cv::KeyPoint>;
+
 struct FeatureResults {
-	std::vector<cv::KeyPoint> keypoints;
+	FeaturePoints keypoints;
 	cv::Mat descriptors;
 };
 
@@ -17,6 +24,9 @@ enum FeatureDetectionType {
 };
 
 std::unique_ptr<cv::Mat> getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType = ORB);
+std::unique_ptr<CornerPointsContainer> getTargetObjectCorners(const cv::Mat& img);
+std::unique_ptr<CornerPointsContainer> objectCornerPointsToSceneCornerPoints(const cv::Mat& homography, const CornerPointsContainer& objectCornerPoints);
+void markCornersAndOutlineObject(cv::Mat& dst, const CornerPointsContainer& cornerPoints);
 
 void printUsage() {
 	std::cout << "Usage: " << std::endl;
@@ -69,7 +79,21 @@ int main(int argc, char* argv[]) {
 	else if (method == "orb")
 		detectionType = ORB;
 
-	auto homography = getHomography(objImage, scnImage, detectionType);
+	const auto homography = getHomography(objImage, scnImage, detectionType);
+
+	std::cout << *homography << std::endl;
+
+	const auto objectCorners = getTargetObjectCorners(objImage);
+
+	for (const auto& cornerPoints : *objectCorners)
+		std::cout << cornerPoints << std::endl;
+
+	const auto sceneCorners = objectCornerPointsToSceneCornerPoints(*homography, *objectCorners);
+
+	for (const auto& cornerPoints : *sceneCorners)
+		std::cout << cornerPoints << std::endl;
+
+	markCornersAndOutlineObject(detImage, *sceneCorners);
 
 	// Save the detected object
 	cv::imwrite("detectedObject.png", detImage);
@@ -77,7 +101,7 @@ int main(int argc, char* argv[]) {
 	cv::imshow("Detection", detImage);
 	std::cout << "That took " << timer.elapsed() << " seconds" << std::endl;
 	cv::waitKey();
-		 
+
 }
 
 inline cv::Ptr<cv::FeatureDetector> getDetector(const FeatureDetectionType& featureType) {
@@ -93,8 +117,39 @@ inline cv::Ptr<cv::DescriptorMatcher> getMatcher() {
 	return cv::BFMatcher::create();
 }
 
+inline cv::Mat getIdentityMatrix() {
+    return cv::Mat::eye(3, 3, CV_64F);
+}
+
+inline cv::Mat getColumnVector(const int u, const int v) {
+	return {3, 1, CV_64F, {static_cast<double>(u), static_cast<double>(v), 1}};
+}
+
+inline void convertToCoordinate(const cv::Mat& mat, int &u, int &v) {
+	u = static_cast<int>(mat.at<double>(0) / mat.at<double>(2) + 0.5);
+	v = static_cast<int>(mat.at<double>(1) / mat.at<double>(2) + 0.5);
+}
+
+inline cv::Point convertToCoordinate(const cv::Mat &mat, cv::Point2f& src) {
+	int u, v;
+
+	convertToCoordinate(mat, u, v);
+
+	return {u, v};
+}
+
+inline cv::Mat translationMatrix(const double dx, const double dy) {
+	cv::Mat mat = cv::Mat::eye(3, 3, CV_64F);
+
+	mat.at<double>(0, 2) = dx;
+	mat.at<double>(1, 2) = dy;
+
+	return mat;
+}
+
+// ASSIGNMENT STEP 1
 std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType) {
-	auto detector = getDetector(featureType);
+	const auto detector = getDetector(featureType);
 
 	auto results = std::make_unique<FeatureResults>();
 
@@ -103,7 +158,7 @@ std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDe
 	return results;
 }
 
-template<typename MatchesContainer = std::vector<std::vector<cv::DMatch>>>
+// ASSIGNMENT STEP 2
 std::unique_ptr<MatchesContainer> findMatches(const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
 	static auto matcher = getMatcher();
 
@@ -114,8 +169,7 @@ std::unique_ptr<MatchesContainer> findMatches(const cv::Mat& descriptors1, const
 	return result;
 }
 
-template<typename GoodMatchesContainer = std::vector<cv::DMatch>,
-		 typename MatchesContainer     = std::vector<std::vector<cv::DMatch>>>
+// ASSIGNMENT STEP 3
 std::unique_ptr<GoodMatchesContainer> findGoodMatches(const MatchesContainer& matches) {
 	auto results = std::make_unique<GoodMatchesContainer>();
 	for (const auto& match : matches) {
@@ -126,11 +180,8 @@ std::unique_ptr<GoodMatchesContainer> findGoodMatches(const MatchesContainer& ma
 	return results;
 }
 
-template<typename TransformPoints      = std::vector<cv::Point2f>,
-		 typename TransformMatches     = std::pair<TransformPoints, TransformPoints>,
-		 typename GoodMatchesContainer = std::vector<cv::DMatch>,
-		 typename FeatureLocations     = std::vector<cv::KeyPoint>>
-std::unique_ptr<TransformMatches> getGoodPoints(const GoodMatchesContainer& matches, const FeatureLocations& keypoints1, const FeatureLocations& keypoints2) {
+// ASSIGNMENT STEP 3
+std::unique_ptr<TransformMatches> getGoodPoints(const GoodMatchesContainer& matches, const FeaturePoints& keypoints1, const FeaturePoints& keypoints2) {
 	auto results = std::make_unique<TransformMatches>();
 
 	for (const auto& match : matches) {
@@ -141,6 +192,7 @@ std::unique_ptr<TransformMatches> getGoodPoints(const GoodMatchesContainer& matc
 	return results;
 }
 
+// ASSIGNMENT STEP 4
 std::unique_ptr<cv::Mat> getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType) {
 
 	const auto img1_features = findFeatures(img1, featureType);
@@ -156,8 +208,60 @@ std::unique_ptr<cv::Mat> getHomography(const cv::Mat& img1, const cv::Mat& img2,
 	std::vector<unsigned char> inliers;
 
 	auto homography =
-		std::make_unique<cv::Mat>(cv::findHomography(goodPoints->second, goodPoints->first, inliers, cv::RANSAC));
+		std::make_unique<cv::Mat>(cv::findHomography(goodPoints->first, goodPoints->second, inliers, cv::RANSAC));
 
 	return homography;
 }
 
+/*
+ * ASSIGNMENT STEP 5
+ *
+ * Corners of the target are just the corners of the object image
+ * Array indexes:
+ * - 0: Top-left
+ * - 1: Top-right
+ * - 2: Bottom-right
+ * - 3: Bottom-left
+ */
+std::unique_ptr<CornerPointsContainer> getTargetObjectCorners(const cv::Mat& img) {
+	const auto img_bounds = std::make_pair(static_cast<float>(img.size().width - 1), static_cast<float>(img.size().height - 1));
+
+	auto corners = std::make_unique<CornerPointsContainer>(CornerPointsContainer{{
+		{0, 0},
+		{img_bounds.first, 0},
+		{img_bounds.first, img_bounds.second},
+		{0, img_bounds.second},
+	}});
+
+	return corners;
+}
+
+/*
+ * ASSIGNMENT STEP 6
+ *
+ * Translate object corner points to scene corner points
+ */
+std::unique_ptr<CornerPointsContainer> objectCornerPointsToSceneCornerPoints(const cv::Mat& homography, const CornerPointsContainer& objectCornerPoints) {
+	auto corners = std::make_unique<CornerPointsContainer>();
+
+	cv::perspectiveTransform(objectCornerPoints, *corners, homography);
+
+	return corners;
+}
+
+/*
+ * ASSIGNMENT STEP 7
+ *
+ * - Draw a small circle at each detected object corner
+ * - Draw lines between the object corners, to outline the detected object
+ */
+void markCornersAndOutlineObject(cv::Mat& dst, const CornerPointsContainer& cornerPoints) {
+	static auto markColor = cv::Scalar(0, 255, 0);
+	static int thickness = 5;
+
+	for (int i = 0; i < cornerPoints.size(); ++i) {
+		cv::line(dst, cornerPoints[i], cornerPoints[(i + 1) % cornerPoints.size()], markColor, thickness);
+
+		cv::circle(dst, cornerPoints[i], thickness, markColor, thickness);
+	}
+}
