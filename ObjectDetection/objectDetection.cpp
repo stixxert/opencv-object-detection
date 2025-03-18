@@ -10,12 +10,11 @@ template<typename T, size_t N>
 using PointContainer = std::array<cv::Point_<T>, N>;
 
 using CornerPointsContainerFloat = PointContainer<float, 4>;
-using CornerPointsContainerInt = PointContainer<int, 4>;
 
 using TransformPoints = std::vector<cv::Point2f>;
 using TransformMatches = std::pair<TransformPoints, TransformPoints>;
-using MatchesContainer = std::vector<std::vector<cv::DMatch>>;
-using GoodMatchesContainer = std::vector<cv::DMatch>;
+using MatchesContainer = std::vector<cv::DMatch>;
+using MatchesContainerKNN = std::vector<MatchesContainer>;
 using FeaturePoints = std::vector<cv::KeyPoint>;
 
 struct FeatureResults {
@@ -31,7 +30,13 @@ enum FeatureDetectionType {
 template<size_t N>
 std::unique_ptr<PointContainer<int, N>> convertToCoordinatePos(cv::Mat& mat, PointContainer<float, N>& src);
 
-std::unique_ptr<cv::Mat> getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType = ORB);
+std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType);
+std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
+std::unique_ptr<MatchesContainerKNN> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
+std::unique_ptr<MatchesContainer> findGoodMatchesKNN(const MatchesContainer& matches);
+std::unique_ptr<MatchesContainer> findGoodMatches(const MatchesContainer& matches);
+
+cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType = ORB);
 std::unique_ptr<CornerPointsContainerFloat> getTargetObjectCorners(const cv::Mat& img);
 std::unique_ptr<CornerPointsContainerFloat> objectCornerPointsToSceneCornerPoints(const cv::Mat& homography, const CornerPointsContainerFloat& objectCornerPoints);
 
@@ -82,6 +87,7 @@ int main(int argc, char* argv[]) {
 		exit(-4);
 	}
 	cv::Mat detImage = scnImage.clone();
+	cv::Mat d1Img = scnImage.clone();
 
 	FeatureDetectionType detectionType = ORB;
 	if (method == "sift")
@@ -89,24 +95,35 @@ int main(int argc, char* argv[]) {
 	else if (method == "orb")
 		detectionType = ORB;
 
+	const auto img1f = findFeatures(objImage, detectionType);
+	const auto img2f = findFeatures(scnImage, detectionType);
+
+
+	const auto matches = findMatches(detectionType, img1f->descriptors, img2f->descriptors);
+
+	const auto bMatches = findGoodMatches(*matches);
+
+	cv::drawMatches(objImage, img1f->keypoints, scnImage, img2f->keypoints, *bMatches, d1Img);
+
+	cv::namedWindow("Matches");
+	cv::imshow("Matches", d1Img);
+	cv::waitKey();
+
+	//cv::drawKeypoints(scnImage, features->keypoints, detImage, cv::Scalar(0, 255, 0));
+
 	const auto homography = getHomography(objImage, scnImage, detectionType);
 
-	std::cout << *homography << std::endl;
+	std::cout << homography << std::endl;
 
 	const auto objectCorners = getTargetObjectCorners(objImage);
 
 	for (const auto& cornerPoints : *objectCorners)
 		std::cout << cornerPoints << std::endl;
 
-	const auto sceneCorners = objectCornerPointsToSceneCornerPoints(*homography, *objectCorners);
+	const auto sceneCorners = objectCornerPointsToSceneCornerPoints(homography, *objectCorners);
 
 	for (const auto& cornerPoints : *sceneCorners)
 		std::cout << cornerPoints << std::endl;
-
-	/*auto coordinateCorners = convertToCoordinatePos(*homography, *sceneCorners);
-
-	for (const auto& cornerPoints : *coordinateCorners)
-		std::cout << cornerPoints << std::endl;*/
 
 	markCornersAndOutlineObject(detImage, *sceneCorners);
 
@@ -128,7 +145,12 @@ inline cv::Ptr<cv::FeatureDetector> getDetector(const FeatureDetectionType& feat
 	return cv::ORB::create();
 }
 
-inline cv::Ptr<cv::DescriptorMatcher> getMatcher() {
+inline cv::Ptr<cv::DescriptorMatcher> getMatcher(const FeatureDetectionType& featureType) {
+	if (featureType == ORB)
+		return cv::BFMatcher::create(cv::NORM_HAMMING);
+	if (featureType == SIFT)
+		return cv::BFMatcher::create();
+
 	return cv::BFMatcher::create();
 }
 
@@ -188,11 +210,30 @@ std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDe
 	return results;
 }
 
-// ASSIGNMENT STEP 2
-std::unique_ptr<MatchesContainer> findMatches(const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
-	static auto matcher = getMatcher();
+/*
+ * ASSIGNMENT STEP 2
+ *
+ * Used for ORB
+ */
+std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
+	static auto matcher = getMatcher(featureType);
 
 	auto result = std::make_unique<MatchesContainer>();
+
+	matcher->match(descriptors1, descriptors2, *result);
+
+	return result;
+}
+
+/*
+ * ASSIGNMENT STEP 2
+ *
+ * Used for SIFT
+ */
+std::unique_ptr<MatchesContainerKNN> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
+	static auto matcher = getMatcher(featureType);
+
+	auto result = std::make_unique<MatchesContainerKNN>();
 
 	matcher->knnMatch(descriptors1, descriptors2, *result, 2);
 
@@ -200,8 +241,8 @@ std::unique_ptr<MatchesContainer> findMatches(const cv::Mat& descriptors1, const
 }
 
 // ASSIGNMENT STEP 3
-std::unique_ptr<GoodMatchesContainer> findGoodMatches(const MatchesContainer& matches) {
-	auto results = std::make_unique<GoodMatchesContainer>();
+std::unique_ptr<MatchesContainer> findGoodMatchesKNN(const MatchesContainerKNN& matches) {
+	auto results = std::make_unique<MatchesContainer>();
 	for (const auto& match : matches) {
 		if (match[0].distance < 0.8 * match[1].distance)
 			results->push_back(match[0]);
@@ -211,7 +252,18 @@ std::unique_ptr<GoodMatchesContainer> findGoodMatches(const MatchesContainer& ma
 }
 
 // ASSIGNMENT STEP 3
-std::unique_ptr<TransformMatches> getGoodPoints(const GoodMatchesContainer& matches, const FeaturePoints& keypoints1, const FeaturePoints& keypoints2) {
+std::unique_ptr<MatchesContainer> findGoodMatches(const MatchesContainer& matches) {
+	auto results = std::make_unique<MatchesContainer>();
+	for (const auto& match : matches) {
+		if (match.distance)
+			results->push_back(match);
+	}
+
+	return results;
+}
+
+// ASSIGNMENT STEP 3
+std::unique_ptr<TransformMatches> getGoodPoints(const MatchesContainer& matches, const FeaturePoints& keypoints1, const FeaturePoints& keypoints2) {
 	auto results = std::make_unique<TransformMatches>();
 
 	for (const auto& match : matches) {
@@ -223,22 +275,34 @@ std::unique_ptr<TransformMatches> getGoodPoints(const GoodMatchesContainer& matc
 }
 
 // ASSIGNMENT STEP 4
-std::unique_ptr<cv::Mat> getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType) {
+cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType) {
 
 	const auto img1_features = findFeatures(img1, featureType);
 	const auto img2_features = findFeatures(img2, featureType);
 
-	const auto matches = findMatches(img1_features->descriptors, img2_features->descriptors);
+	std::unique_ptr<MatchesContainer> matches_result;
 
-	const auto goodMatches = findGoodMatches(*matches);
+	if (featureType == ORB) {
+		const auto matches = findMatches(featureType, img1_features->descriptors, img2_features->descriptors);
+
+		auto goodMatches = findGoodMatches(*matches);
+
+		matches_result = std::move(goodMatches);
+	}
+	else if (featureType == SIFT) {
+		const auto matches = findMatchesKNN(featureType, img1_features->descriptors, img2_features->descriptors);
+
+		auto goodMatches = findGoodMatchesKNN(*matches);
+
+		matches_result = std::move(goodMatches);
+	}
 
 	const auto goodPoints =
-		getGoodPoints(*goodMatches, img1_features->keypoints, img2_features->keypoints);
+		getGoodPoints(*matches_result, img1_features->keypoints, img2_features->keypoints);
 
 	std::vector<unsigned char> inliers;
 
-	auto homography =
-		std::make_unique<cv::Mat>(cv::findHomography(goodPoints->first, goodPoints->second, inliers, cv::RANSAC));
+	auto homography = cv::findHomography(goodPoints->first, goodPoints->second, inliers, cv::RANSAC);
 
 	return homography;
 }
