@@ -6,6 +6,9 @@
 #include <iostream>
 #include <string>
 
+constexpr bool kDTreeEnabled = true;
+constexpr int orbFeatures = 4000;
+
 template<typename T, size_t N>
 using PointContainer = std::array<cv::Point_<T>, N>;
 
@@ -98,19 +101,6 @@ int main(int argc, char* argv[]) {
 	const auto img1f = findFeatures(objImage, detectionType);
 	const auto img2f = findFeatures(scnImage, detectionType);
 
-
-	const auto matches = findMatches(detectionType, img1f->descriptors, img2f->descriptors);
-
-	const auto bMatches = findGoodMatches(*matches);
-
-	cv::drawMatches(objImage, img1f->keypoints, scnImage, img2f->keypoints, *bMatches, d1Img);
-
-	cv::namedWindow("Matches");
-	cv::imshow("Matches", d1Img);
-	cv::waitKey();
-
-	//cv::drawKeypoints(scnImage, features->keypoints, detImage, cv::Scalar(0, 255, 0));
-
 	const auto homography = getHomography(objImage, scnImage, detectionType);
 
 	std::cout << homography << std::endl;
@@ -138,7 +128,7 @@ int main(int argc, char* argv[]) {
 
 inline cv::Ptr<cv::FeatureDetector> getDetector(const FeatureDetectionType& featureType) {
 	if (featureType == ORB)
-		return cv::ORB::create();
+		return cv::ORB::create(orbFeatures);
 	if (featureType == SIFT)
 		return cv::SIFT::create();
 
@@ -282,7 +272,7 @@ cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDet
 
 	std::unique_ptr<MatchesContainer> matches_result;
 
-	if (featureType == ORB) {
+	if (featureType == ORB || (featureType == SIFT && !kDTreeEnabled)) {
 		const auto matches = findMatches(featureType, img1_features->descriptors, img2_features->descriptors);
 
 		auto goodMatches = findGoodMatches(*matches);
