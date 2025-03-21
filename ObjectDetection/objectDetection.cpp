@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 
-constexpr bool kDTreeEnabled = false;
+constexpr bool kDTreeEnabled = true;
 constexpr int orbFeatures = 4000;
 
 constexpr bool verbose = false;
@@ -107,8 +107,10 @@ int main(int argc, char* argv[]) {
 
 	const auto objectCorners = getTargetObjectCorners(objImage);
 
-	for (const auto& cornerPoints : *objectCorners)
-		std::cout << cornerPoints << std::endl;
+	if (verbose) {
+		for (const auto& cornerPoints : *objectCorners)
+			std::cout << cornerPoints << std::endl;
+	}
 
 	const auto sceneCorners = objectCornerPointsToSceneCornerPoints(homography, *objectCorners);
 
@@ -226,7 +228,7 @@ std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featur
 }
 
 /*
- * ASSIGNMENT STEP 2 + 3
+ * ASSIGNMENT STEP 2 (with STEP 3)
  *
  * Used for SIFT
  */
@@ -242,7 +244,7 @@ std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& fea
 	std::cout << result->size() << " matches found in " << timer.elapsed() << " seconds" << std::endl;
 
 	auto filtered_results = filterToGoodMatchesKD(*result);
-	std::cout << "Filtered to " << result->size() << " good matches, now up to " << timer.elapsed() << " seconds" << std::endl;
+	std::cout << "Filtered to " << filtered_results->size() << " good matches, now up to " << timer.elapsed() << " seconds" << std::endl;
 
 	return filtered_results;
 }
@@ -251,12 +253,10 @@ std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& fea
 std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKNN& matches) {
 	auto result = std::make_unique<MatchesContainer>();
 
-	for (const auto it = matches.begin(); it != matches.end();) {
-
-		if (it + 1 < matches.end()) break;
-
-		if ((*it)[0].distance < 0.8 * (*it)[1].distance)
-			result->push_back((*it)[0]);
+	for (const auto& match : matches) {
+		if (match[0].distance < 0.8 * match[1].distance) {
+			result->push_back(match[0]);
+		}
 	}
 
 	return result;
@@ -288,7 +288,7 @@ cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDet
 
 		matches_result = std::move(matches);
 	}
-	else if (featureType == SIFT && kDTreeEnabled) {
+	else if (featureType == SIFT) {
 		auto matches = findMatchesKNN(featureType, img1_features->descriptors, img2_features->descriptors);
 
 		matches_result = std::move(matches);
