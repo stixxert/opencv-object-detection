@@ -6,8 +6,10 @@
 #include <iostream>
 #include <string>
 
-constexpr bool kDTreeEnabled = true;
+constexpr bool kDTreeEnabled = false;
 constexpr int orbFeatures = 4000;
+
+constexpr bool verbose = false;
 
 template<typename T, size_t N>
 using PointContainer = std::array<cv::Point_<T>, N>;
@@ -35,9 +37,9 @@ std::unique_ptr<PointContainer<int, N>> convertToCoordinatePos(cv::Mat& mat, Poi
 
 std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType);
 std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
-std::unique_ptr<MatchesContainerKNN> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
-std::unique_ptr<MatchesContainer> findGoodMatchesKNN(const MatchesContainer& matches);
-std::unique_ptr<MatchesContainer> findGoodMatches(const MatchesContainer& matches);
+std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
+
+std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKNN& matches);
 
 cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType = ORB);
 std::unique_ptr<CornerPointsContainerFloat> getTargetObjectCorners(const cv::Mat& img);
@@ -98,12 +100,10 @@ int main(int argc, char* argv[]) {
 	else if (method == "orb")
 		detectionType = ORB;
 
-	const auto img1f = findFeatures(objImage, detectionType);
-	const auto img2f = findFeatures(scnImage, detectionType);
-
 	const auto homography = getHomography(objImage, scnImage, detectionType);
 
-	std::cout << homography << std::endl;
+	if (verbose)
+		std::cout << homography << std::endl;
 
 	const auto objectCorners = getTargetObjectCorners(objImage);
 
@@ -112,8 +112,10 @@ int main(int argc, char* argv[]) {
 
 	const auto sceneCorners = objectCornerPointsToSceneCornerPoints(homography, *objectCorners);
 
-	for (const auto& cornerPoints : *sceneCorners)
-		std::cout << cornerPoints << std::endl;
+	if (verbose) {
+		for (const auto& cornerPoints : *sceneCorners)
+			std::cout << cornerPoints << std::endl;
+	}
 
 	markCornersAndOutlineObject(detImage, *sceneCorners);
 
@@ -121,7 +123,7 @@ int main(int argc, char* argv[]) {
 	cv::imwrite("detectedObject.png", detImage);
 	cv::namedWindow("Detection");
 	cv::imshow("Detection", detImage);
-	std::cout << "That took " << timer.elapsed() << " seconds" << std::endl;
+	//std::cout << "That took " << timer.elapsed() << " seconds" << std::endl;
 	cv::waitKey();
 
 }
@@ -195,7 +197,11 @@ std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDe
 
 	auto results = std::make_unique<FeatureResults>();
 
+	const Timer timer;
+
 	detector->detectAndCompute(img, cv::noArray(), results->keypoints, results->descriptors);
+
+	std::cout << results->keypoints.size() << " features detected in " << timer.elapsed() << " seconds" << std::endl;
 
 	return results;
 }
@@ -210,47 +216,52 @@ std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featur
 
 	auto result = std::make_unique<MatchesContainer>();
 
+	const Timer timer;
+
 	matcher->match(descriptors1, descriptors2, *result);
+
+	std::cout << result->size() << " matches found in " << timer.elapsed() << " seconds" << std::endl;
 
 	return result;
 }
 
 /*
- * ASSIGNMENT STEP 2
+ * ASSIGNMENT STEP 2 + 3
  *
  * Used for SIFT
  */
-std::unique_ptr<MatchesContainerKNN> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
+std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
 	static auto matcher = getMatcher(featureType);
 
-	auto result = std::make_unique<MatchesContainerKNN>();
+	const auto result = std::make_unique<MatchesContainerKNN>();
+
+	const Timer timer;
 
 	matcher->knnMatch(descriptors1, descriptors2, *result, 2);
+
+	std::cout << result->size() << " matches found in " << timer.elapsed() << " seconds" << std::endl;
+
+	auto filtered_results = filterToGoodMatchesKD(*result);
+	std::cout << "Filtered to " << result->size() << " good matches, now up to " << timer.elapsed() << " seconds" << std::endl;
+
+	return filtered_results;
+}
+
+// ASSIGNMENT STEP 3
+std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKNN& matches) {
+	auto result = std::make_unique<MatchesContainer>();
+
+	for (const auto it = matches.begin(); it != matches.end();) {
+
+		if (it + 1 < matches.end()) break;
+
+		if ((*it)[0].distance < 0.8 * (*it)[1].distance)
+			result->push_back((*it)[0]);
+	}
 
 	return result;
 }
 
-// ASSIGNMENT STEP 3
-std::unique_ptr<MatchesContainer> findGoodMatchesKNN(const MatchesContainerKNN& matches) {
-	auto results = std::make_unique<MatchesContainer>();
-	for (const auto& match : matches) {
-		if (match[0].distance < 0.8 * match[1].distance)
-			results->push_back(match[0]);
-	}
-
-	return results;
-}
-
-// ASSIGNMENT STEP 3
-std::unique_ptr<MatchesContainer> findGoodMatches(const MatchesContainer& matches) {
-	auto results = std::make_unique<MatchesContainer>();
-	for (const auto& match : matches) {
-		if (match.distance)
-			results->push_back(match);
-	}
-
-	return results;
-}
 
 // ASSIGNMENT STEP 3
 std::unique_ptr<TransformMatches> getGoodPoints(const MatchesContainer& matches, const FeaturePoints& keypoints1, const FeaturePoints& keypoints2) {
@@ -273,18 +284,14 @@ cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDet
 	std::unique_ptr<MatchesContainer> matches_result;
 
 	if (featureType == ORB || (featureType == SIFT && !kDTreeEnabled)) {
-		const auto matches = findMatches(featureType, img1_features->descriptors, img2_features->descriptors);
+		auto matches = findMatches(featureType, img1_features->descriptors, img2_features->descriptors);
 
-		auto goodMatches = findGoodMatches(*matches);
-
-		matches_result = std::move(goodMatches);
+		matches_result = std::move(matches);
 	}
-	else if (featureType == SIFT) {
-		const auto matches = findMatchesKNN(featureType, img1_features->descriptors, img2_features->descriptors);
+	else if (featureType == SIFT && kDTreeEnabled) {
+		auto matches = findMatchesKNN(featureType, img1_features->descriptors, img2_features->descriptors);
 
-		auto goodMatches = findGoodMatchesKNN(*matches);
-
-		matches_result = std::move(goodMatches);
+		matches_result = std::move(matches);
 	}
 
 	const auto goodPoints =
