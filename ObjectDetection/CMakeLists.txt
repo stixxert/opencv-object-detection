@@ -11,9 +11,14 @@ find_package(OpenCV REQUIRED)
 
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
-add_executable( ObjectDetection objectDetection.cpp Timer.h Timer.cpp)
+add_executable( ObjectDetection objectDetection.cpp Timer.h Timer.cpp
+		common.hpp)
+
+add_executable( ImageManipulation imageManipulation.cpp common.hpp)
 
 target_link_libraries( ObjectDetection ${OpenCV_LIBS} )
+
+target_link_libraries( ImageManipulation ${OpenCV_LIBS})
 
 set_target_properties (
 	ObjectDetection PROPERTIES 
