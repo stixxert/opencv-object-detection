@@ -11,7 +11,7 @@
 constexpr bool kDTreeEnabled = true;
 constexpr int orbFeatures = 4000;
 
-constexpr bool verbose = false;
+constexpr bool verbose = true;
 
 template<typename T, size_t N>
 using PointContainer = std::array<cv::Point_<T>, N>;
@@ -33,9 +33,6 @@ enum FeatureDetectionType {
 	ORB,
 	SIFT,
 };
-
-template<size_t N>
-std::unique_ptr<PointContainer<int, N>> convertToCoordinatePos(cv::Mat& mat, PointContainer<float, N>& src);
 
 std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType);
 std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
@@ -141,17 +138,6 @@ inline cv::Ptr<cv::DescriptorMatcher> getMatcher(const FeatureDetectionType& fea
 		return cv::BFMatcher::create();
 
 	return cv::BFMatcher::create();
-}
-
-template<size_t N>
-std::unique_ptr<PointContainer<int, N>> convertToCoordinatePos(cv::Mat& mat, PointContainer<float, N>& src) {
-	auto result = std::make_unique<PointContainer<int, N>>();
-
-	for (size_t i = 0; i < N; i++) {
-		result.get()[0][i] = convertToCoordinate(src[i]);
-	}
-
-	return result;
 }
 
 // ASSIGNMENT STEP 1
