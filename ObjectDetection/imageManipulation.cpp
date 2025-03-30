@@ -41,7 +41,7 @@ cv::Size getNewBounds(cv::Mat& mat, cv::Size& src) {
     return {newBounds.width, newBounds.height};
 }
 
-cv::Mat rotate(cv::Mat& src, int value) {
+cv::Mat rotate(cv::Mat& src, double value) {
     auto rotationMatrix = cv::getRotationMatrix2D({static_cast<float>(src.cols / 2.0), static_cast<float>(src.rows / 2.0)}, value, 1);
 
     auto oldSize = src.size();
@@ -55,16 +55,10 @@ cv::Mat rotate(cv::Mat& src, int value) {
     return dst;
 }
 
-cv::Mat illuminate(cv::Mat& src, int value) {
+cv::Mat illuminate(cv::Mat& src, double value) {
     cv::Mat dst = src.clone();
 
-    for (int v = 0; v < src.rows; ++v) {
-        for (int u = 0; u < src.cols; ++u) {
-            for (int c = 0; c < src.channels(); ++c)
-                dst.at<cv::Vec3b>(v, u)[c] = cv::saturate_cast<unsigned char>(
-                    src.at<cv::Vec3b>(v, u)[c] + value);
-        }
-    }
+    src.convertTo(dst, -1, 1, value);
 
     return dst;
 }
@@ -100,11 +94,11 @@ int main(int argc, char* argv[]) {
     const float value = std::stof(argv[4]);
 
     if (toLower(argv[3]) == "rotate") {
-        res = rotate(img, static_cast<int>(value));
+        res = rotate(img, static_cast<double>(value));
     }
 
     else if (toLower(argv[3]) == "illuminate") {
-        res = illuminate(img, static_cast<int>(value));
+        res = illuminate(img, static_cast<double>(value));
     }
 
     else if (toLower(argv[3]) == "scale") {

@@ -9,7 +9,7 @@
 
 
 constexpr bool kDTreeEnabled = true;
-constexpr int orbFeatures = 4000;
+constexpr int orbFeatures = 10000;
 
 constexpr bool verbose = true;
 
@@ -33,7 +33,9 @@ enum FeatureDetectionType {
 	ORB,
 	SIFT,
 };
-
+/*
+ * Forward declarations
+ */
 std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType);
 std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
 std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);

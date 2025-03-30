@@ -12,7 +12,7 @@ find_package(OpenCV REQUIRED)
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
 add_executable( ObjectDetection objectDetection.cpp Timer.h Timer.cpp
-		common.hpp)
+		common.hpp )
 
 add_executable( ImageManipulation imageManipulation.cpp common.hpp)
 
