@@ -13,36 +13,54 @@ constexpr int orbFeatures = 10000;
 
 constexpr bool verbose = true;
 
+/*
+ * Shortening container types:
+ * I felt the need to shorten container names, to the list of 'typedefines' below.
+ * Function signatures became horribly long without them. I hope this doesn't reduce readability.
+ */
+
 template<typename T, size_t N>
 using PointContainer = std::array<cv::Point_<T>, N>;
 
 using CornerPointsContainerFloat = PointContainer<float, 4>;
 
 using TransformPoints = std::vector<cv::Point2f>;
-using TransformMatches = std::pair<TransformPoints, TransformPoints>;
+using TransformMatches = std::pair<std::vector<cv::Point2f>, std::vector<cv::Point2f>>;
+
 using MatchesContainer = std::vector<cv::DMatch>;
-using MatchesContainerKNN = std::vector<MatchesContainer>;
+using MatchesContainerKD = std::vector<MatchesContainer>;
+
 using FeaturePoints = std::vector<cv::KeyPoint>;
 
+/*
+ * Encapsulating results of a feature detection search,
+ * to ease storing and forwarding.
+ */
 struct FeatureResults {
 	FeaturePoints keypoints;
 	cv::Mat descriptors;
 };
 
+/*
+ * Algorithms that runtime input can select
+ */
 enum FeatureDetectionType {
 	ORB,
 	SIFT,
 };
+
 /*
  * Forward declarations
  */
 std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType);
-std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
-std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
 
-std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKNN& matches);
+std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
+std::unique_ptr<MatchesContainer> findMatchesKD(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2);
+
+std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKD& matches);
 
 cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType = ORB);
+
 std::unique_ptr<CornerPointsContainerFloat> getTargetObjectCorners(const cv::Mat& img);
 std::unique_ptr<CornerPointsContainerFloat> objectCornerPointsToSceneCornerPoints(const cv::Mat& homography, const CornerPointsContainerFloat& objectCornerPoints);
 
@@ -58,10 +76,7 @@ void printUsage() {
 	std::cout << " e.g.: ObjectDetector object.png scene.png SIFT" << std::endl;
 }
 
-
 int main(int argc, char* argv[]) {
-	Timer timer;
-
 	if (argc != 4) {
 		printUsage();
 		exit(-1);
@@ -119,11 +134,12 @@ int main(int argc, char* argv[]) {
 	cv::imwrite("detectedObject.png", detImage);
 	cv::namedWindow("Detection");
 	cv::imshow("Detection", detImage);
-	//std::cout << "That took " << timer.elapsed() << " seconds" << std::endl;
 	cv::waitKey();
-
 }
 
+/*
+ * Return appropriate feature detector based on type input
+ */
 inline cv::Ptr<cv::FeatureDetector> getDetector(const FeatureDetectionType& featureType) {
 	if (featureType == ORB)
 		return cv::ORB::create(orbFeatures);
@@ -133,6 +149,9 @@ inline cv::Ptr<cv::FeatureDetector> getDetector(const FeatureDetectionType& feat
 	return cv::ORB::create();
 }
 
+/*
+ * Return appropriate descriptor matcher based on feature detection type
+ */
 inline cv::Ptr<cv::DescriptorMatcher> getMatcher(const FeatureDetectionType& featureType) {
 	if (featureType == ORB)
 		return cv::BFMatcher::create(cv::NORM_HAMMING);
@@ -142,7 +161,9 @@ inline cv::Ptr<cv::DescriptorMatcher> getMatcher(const FeatureDetectionType& fea
 	return cv::BFMatcher::create();
 }
 
-// ASSIGNMENT STEP 1
+/*
+ * Detect features in a image
+ */
 std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType) {
 	const auto detector = getDetector(featureType);
 
@@ -158,7 +179,7 @@ std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDe
 }
 
 /*
- * ASSIGNMENT STEP 2
+ * Match features between two images
  *
  * Used for ORB
  */
@@ -177,14 +198,16 @@ std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featur
 }
 
 /*
- * ASSIGNMENT STEP 2 (with STEP 3)
+ * Match features between two images, and:
+ *
+ * Filter to remove ambiguous cases.
  *
  * Used for SIFT
  */
-std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
+std::unique_ptr<MatchesContainer> findMatchesKD(const FeatureDetectionType& featureType, const cv::Mat& descriptors1, const cv::Mat& descriptors2) {
 	static auto matcher = getMatcher(featureType);
 
-	const auto result = std::make_unique<MatchesContainerKNN>();
+	const auto result = std::make_unique<MatchesContainerKD>();
 
 	const Timer timer;
 
@@ -198,8 +221,10 @@ std::unique_ptr<MatchesContainer> findMatchesKNN(const FeatureDetectionType& fea
 	return filtered_results;
 }
 
-// ASSIGNMENT STEP 3
-std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKNN& matches) {
+/*
+ *  Filter matches to remove ambiguous cases
+ */
+std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKD& matches) {
 	auto result = std::make_unique<MatchesContainer>();
 
 	for (const auto& match : matches) {
@@ -211,9 +236,10 @@ std::unique_ptr<MatchesContainer> filterToGoodMatchesKD(const MatchesContainerKN
 	return result;
 }
 
-
-// ASSIGNMENT STEP 3
-std::unique_ptr<TransformMatches> getGoodPoints(const MatchesContainer& matches, const FeaturePoints& keypoints1, const FeaturePoints& keypoints2) {
+/*
+ * Prepares matches to match object points to scene, to make homography
+ */
+std::unique_ptr<std::pair<std::vector<cv::Point2f>, std::vector<cv::Point2f>>> getGoodPoints(const MatchesContainer& matches, const FeaturePoints& keypoints1, const FeaturePoints& keypoints2) {
 	auto results = std::make_unique<TransformMatches>();
 
 	for (const auto& match : matches) {
@@ -224,7 +250,9 @@ std::unique_ptr<TransformMatches> getGoodPoints(const MatchesContainer& matches,
 	return results;
 }
 
-// ASSIGNMENT STEP 4
+/*
+ * Computes homography using RANSAC to remove inconsistent matches
+ */
 cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDetectionType& featureType) {
 
 	const auto img1_features = findFeatures(img1, featureType);
@@ -232,29 +260,37 @@ cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDet
 
 	std::unique_ptr<MatchesContainer> matches_result;
 
+    /*
+     * SIFT matching is done using the same methodology as ORB if K-D trees are not enabled (SIFT+filter)
+     */
 	if (featureType == ORB || (featureType == SIFT && !kDTreeEnabled)) {
 		auto matches = findMatches(featureType, img1_features->descriptors, img2_features->descriptors);
 
 		matches_result = std::move(matches);
 	}
+    /*
+     * SIFT+filter (K-D tree) is enabled
+     */
 	else if (featureType == SIFT) {
-		auto matches = findMatchesKNN(featureType, img1_features->descriptors, img2_features->descriptors);
+		auto matches = findMatchesKD(featureType, img1_features->descriptors, img2_features->descriptors);
 
 		matches_result = std::move(matches);
 	}
 
+    /*
+     * Mapping points between object to scene, before calculating homography.
+     */
 	const auto goodPoints =
 		getGoodPoints(*matches_result, img1_features->keypoints, img2_features->keypoints);
 
 	std::vector<unsigned char> inliers;
-
 	auto homography = cv::findHomography(goodPoints->first, goodPoints->second, inliers, cv::RANSAC);
 
 	return homography;
 }
 
 /*
- * ASSIGNMENT STEP 5
+ * Getting the corners of the object to detect
  *
  * Corners of the target are just the corners of the object image
  * Array indexes:
@@ -264,6 +300,9 @@ cv::Mat getHomography(const cv::Mat& img1, const cv::Mat& img2, const FeatureDet
  * - 3: Bottom-left
  */
 std::unique_ptr<CornerPointsContainerFloat> getTargetObjectCorners(const cv::Mat& img) {
+  /*
+   * Using the size of the image to compute corners.
+   */
 	const auto img_bounds = std::make_pair(static_cast<float>(img.size().width - 1), static_cast<float>(img.size().height - 1));
 
 	auto corners = std::make_unique<CornerPointsContainerFloat>(CornerPointsContainerFloat{{
@@ -277,23 +316,22 @@ std::unique_ptr<CornerPointsContainerFloat> getTargetObjectCorners(const cv::Mat
 }
 
 /*
- * ASSIGNMENT STEP 6
- *
  * Translate object corner points to scene corner points
  */
 std::unique_ptr<CornerPointsContainerFloat> objectCornerPointsToSceneCornerPoints(const cv::Mat& homography, const CornerPointsContainerFloat& objectCornerPoints) {
 	auto corners = std::make_unique<CornerPointsContainerFloat>();
 
+    /*
+     * Transforming corner points
+     */
 	cv::perspectiveTransform(objectCornerPoints, *corners, homography);
 
 	return corners;
 }
 
 /*
- * ASSIGNMENT STEP 7
- *
- * - Draw a small circle at each detected object corner
- * - Draw lines between the object corners, to outline the detected object
+ * Draw a small circle at each detected object corner
+ * Draw lines between the object corners, to outline the detected object
  */
 template<typename T, size_t N = 4>
 void markCornersAndOutlineObject(cv::Mat& dst, const PointContainer<T, N>& cornerPoints) {
@@ -301,6 +339,7 @@ void markCornersAndOutlineObject(cv::Mat& dst, const PointContainer<T, N>& corne
 	static int thickness = 5;
 
 	for (int i = 0; i < N; ++i) {
+        // Wrapping around array to create lines between all corners
 		cv::line(dst, cornerPoints[i], cornerPoints[(i + 1) % cornerPoints.size()], markColor, thickness);
 
 		cv::circle(dst, cornerPoints[i], thickness, markColor, thickness);
