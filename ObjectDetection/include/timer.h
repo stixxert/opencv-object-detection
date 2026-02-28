@@ -2,19 +2,19 @@
 
 #include <chrono>
 
-class Timer {
+class timer {
 
 public:
 
 	// Create and start a new Timer
-	Timer();
+	timer();
 
 	// Copy construction and assignment
-	Timer(const Timer&) = default;
-	~Timer() = default;
+	timer(const timer&) = default;
+	~timer() = default;
 
 	// Destructor
-	Timer& operator=(const Timer&) = default;
+	timer& operator=(const timer&) = default;
 
 	// Reset the Timer start to now
 	void reset();

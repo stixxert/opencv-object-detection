@@ -1,26 +1,19 @@
-CMAKE_MINIMUM_REQUIRED(VERSION "3.12")
+CMAKE_MINIMUM_REQUIRED(VERSION 3.18)
 
-
-#this is set manually for the lab computers this should not be required for other systems with proper installation
-#set(CMAKE_TOOLCHAIN_FILE "K:\\vcpkg\\scripts\\buildsystems\\vcpkg.cmake")
-
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 20)
 
 project( ObjectDetection )
 find_package(OpenCV REQUIRED)
 
+set(PROJECT_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
+
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
-add_executable( ObjectDetection objectDetection.cpp Timer.h Timer.cpp
-		common.hpp )
+add_executable( ObjectDetection src/object_detection.cpp include/timer.h src/timer.cpp
+		include/common.hpp)
 
-add_executable( ImageManipulation imageManipulation.cpp common.hpp)
+add_executable( ImageManipulation src/image_manipulation.cpp include/common.hpp)
 
-target_link_libraries( ObjectDetection ${OpenCV_LIBS} )
+target_link_libraries( ObjectDetection ${OpenCV_LIBS})
 
-target_link_libraries( ImageManipulation ${OpenCV_LIBS})
-
-set_target_properties (
-	ObjectDetection PROPERTIES 
-	VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
-)
+target_link_libraries( ImageManipulation ${OpenCV_LIBS} )

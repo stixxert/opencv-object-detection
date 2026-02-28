@@ -1,7 +1,6 @@
 #include <opencv2/opencv.hpp>
 
-#include "common.hpp"
-#include <cmath>
+#include "../include/common.hpp"
 
 void printUsage() {
     std::cout << "Usage: " << std::endl;
@@ -81,6 +80,8 @@ int main(int argc, char* argv[]) {
 
     if (argc < 5) {
         printUsage();
+
+        return 0;
     }
 
     cv::Mat img = cv::imread(argv[1]);
@@ -112,4 +113,6 @@ int main(int argc, char* argv[]) {
 
     cv::imwrite(argv[2], res);
     std::cout << "Wrote image output to \'" << argv[2] << "\'" << std::endl;
+
+    return 0;
 }

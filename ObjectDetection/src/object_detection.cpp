@@ -1,5 +1,5 @@
-#include "Timer.h"
-#include "common.hpp"
+#include "../include/timer.h"
+#include "../include/common.hpp"
 
 #include <opencv2/opencv.hpp>
 
@@ -15,7 +15,6 @@ constexpr bool verbose = true;
 
 /*
  * Shortening container types:
- * I felt the need to shorten container names, to the list of 'typedefines' below.
  * Function signatures became horribly long without them. I hope this doesn't reduce readability.
  */
 
@@ -135,6 +134,8 @@ int main(int argc, char* argv[]) {
 	cv::namedWindow("Detection");
 	cv::imshow("Detection", detImage);
 	cv::waitKey();
+
+	return 0;
 }
 
 /*
@@ -162,14 +163,14 @@ inline cv::Ptr<cv::DescriptorMatcher> getMatcher(const FeatureDetectionType& fea
 }
 
 /*
- * Detect features in a image
+ * Detect features in an image
  */
 std::unique_ptr<FeatureResults> findFeatures(const cv::Mat& img, const FeatureDetectionType& featureType) {
 	const auto detector = getDetector(featureType);
 
 	auto results = std::make_unique<FeatureResults>();
 
-	const Timer timer;
+	const timer timer;
 
 	detector->detectAndCompute(img, cv::noArray(), results->keypoints, results->descriptors);
 
@@ -188,7 +189,7 @@ std::unique_ptr<MatchesContainer> findMatches(const FeatureDetectionType& featur
 
 	auto result = std::make_unique<MatchesContainer>();
 
-	const Timer timer;
+	const timer timer;
 
 	matcher->match(descriptors1, descriptors2, *result);
 
@@ -209,7 +210,7 @@ std::unique_ptr<MatchesContainer> findMatchesKD(const FeatureDetectionType& feat
 
 	const auto result = std::make_unique<MatchesContainerKD>();
 
-	const Timer timer;
+	const timer timer;
 
 	matcher->knnMatch(descriptors1, descriptors2, *result, 2);
 
@@ -333,12 +334,12 @@ std::unique_ptr<CornerPointsContainerFloat> objectCornerPointsToSceneCornerPoint
  * Draw a small circle at each detected object corner
  * Draw lines between the object corners, to outline the detected object
  */
-template<typename T, size_t N = 4>
+template<typename T, size_t N>
 void markCornersAndOutlineObject(cv::Mat& dst, const PointContainer<T, N>& cornerPoints) {
 	static auto markColor = cv::Scalar(0, 255, 0);
 	static int thickness = 5;
 
-	for (int i = 0; i < N; ++i) {
+	for (unsigned int i = 0; i < N; ++i) {
         // Wrapping around array to create lines between all corners
 		cv::line(dst, cornerPoints[i], cornerPoints[(i + 1) % cornerPoints.size()], markColor, thickness);
 
