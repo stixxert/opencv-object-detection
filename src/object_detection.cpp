@@ -68,36 +68,39 @@ void markCornersAndOutlineObject(cv::Mat& dst, const PointContainer<T, N>& corne
 
 void printUsage() {
 	std::cout << "Usage: " << std::endl;
-	std::cout << " ObjectDetector <object image> <scene image> <method>" << std::endl;
+	std::cout << " ObjectDetection <object image> <scene image> <output image> <method>" << std::endl;
 	std::cout << " <object image> an image of the object to be detected" << std::endl;
 	std::cout << " <scene image> an image of a scene to search for the object" << std::endl;
+	std::cout << " <output image> path to output resulting image" << std::endl;
 	std::cout << " <method>  SIFT or ORB detection" << std::endl;
-	std::cout << " e.g.: ObjectDetector object.png scene.png SIFT" << std::endl;
+	std::cout << " e.g.: ObjectDetection object.png scene.png SIFT" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
-	if (argc != 4) {
+	if (argc != 5) {
 		printUsage();
 		exit(-1);
 	}
 
+	const std::string& output_image = argv[3];
+
 	cv::Mat objImage = cv::imread(argv[1]);
 	if (objImage.empty()) {
 		std::cerr << "Failed to read image from " << argv[1] << std::endl;
-		exit(-2);
+		exit(-1);
 	}
 
 	cv::Mat scnImage = cv::imread(argv[2]);
 	if (scnImage.empty()) {
 		std::cerr << "Failed to read image from " << argv[2] << std::endl;
-		exit(-3);
+		exit(-1);
 	}
 
-	std::string method = toLower(argv[3]);
+	std::string method = toLower(argv[4]);
 
 	if (method != "sift" && method != "orb") {
 		std::cerr << "Invalid method '" << argv[3] << "'" << std::endl;
-		exit(-4);
+		exit(-1);
 	}
 	cv::Mat detImage = scnImage.clone();
 	cv::Mat d1Img = scnImage.clone();
@@ -110,27 +113,27 @@ int main(int argc, char* argv[]) {
 
 	const auto homography = getHomography(objImage, scnImage, detectionType);
 
-	if (verbose)
-		std::cout << homography << std::endl;
+	/*if (verbose)
+		std::cout << homography << std::endl;*/
 
 	const auto objectCorners = getTargetObjectCorners(objImage);
 
-	if (verbose) {
+	/*if (verbose) {
 		for (const auto& cornerPoints : *objectCorners)
 			std::cout << cornerPoints << std::endl;
-	}
+	}*/
 
 	const auto sceneCorners = objectCornerPointsToSceneCornerPoints(homography, *objectCorners);
 
-	if (verbose) {
+	/*if (verbose) {
 		for (const auto& cornerPoints : *sceneCorners)
 			std::cout << cornerPoints << std::endl;
-	}
+	}*/
 
 	markCornersAndOutlineObject(detImage, *sceneCorners);
 
 	// Save the detected object
-	cv::imwrite("detectedObject.png", detImage);
+	cv::imwrite(output_image, detImage);
 	cv::namedWindow("Detection");
 	cv::imshow("Detection", detImage);
 	cv::waitKey();
