@@ -61,6 +61,9 @@ or with additional processing to maximize accuracy.
 ### ORB
 ORB is set to detect a low amount of features by default. This default number might be too low to accurately detect features with, meaning that this number might need to be tweaked with during experimenting.
 
+## Example result
+![Example result](images/detected-example.png)
+
 ## Measuring accuracy
 The object detection process includes highlighting the object, when found in the scene. 
 This makes it possible to measure the accuracy of the detection, 
